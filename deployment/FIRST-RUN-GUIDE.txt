@@ -1,0 +1,16 @@
+ASHKAN LMS — FIRST RUN / راهنمای راه‌اندازی اولیه
+
+1. Install .NET Framework 4.8 or newer and launch AshkanLMS from Start Menu.
+2. Default PersistenceMode is Json. This does NOT connect the main app to SQL Server.
+3. Before changing persistence settings, back up your existing user data.
+4. SQL Server is optional for the relational administration workspace. Configure
+   AshkanLMS.exe.config only after confirming server name, access and migrations.
+5. Run database/001 through 006 in ascending order on a TEST database first.
+6. As an administrator open Relational Workspace > Database health.
+7. If connection fails, use the safe diagnostic report; do not share passwords.
+8. For upgrade: back up data and app configuration; test install/upgrade/uninstall
+   in a clean Windows VM. Uninstall may preserve local app configuration.
+
+فارسی: برنامه به‌صورت پیش‌فرض از ذخیره‌سازی Json استفاده می‌کند.
+قبل از تغییر تنظیمات یا نصب نسخه جدید، از اطلاعات و تنظیمات نسخه فعلی پشتیبان بگیرید.
+برای اتصال SQL Server ابتدا دسترسی‌ها و اسکریپت‌های دیتابیس را بررسی کنید.

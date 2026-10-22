@@ -43,13 +43,14 @@ namespace AshkanLMS.UI
             string auditEntity = null, auditActor = null;
             DateTime? auditFrom = null, auditUntil = null;
             System.Data.DataTable currentAudit = null;
-            Action reload = () => { try { grid.DataSource = view == "Students" ? (object)repo.GetStudents() : view == "Courses" ? (object)repo.GetCourses() : view == "Enrollments" ? (object)repo.GetEnrollments() : view == "Audit" ? (object)(currentAudit = repo.SearchAuditHistory(auditEntity, auditActor, auditFrom, auditUntil)) : repo.GetInstructors(); } catch (Exception ex) { MessageBox.Show(ex.Message, "SQL Server", MessageBoxButtons.OK, MessageBoxIcon.Error); } };
+            Action reload = () => { try { if (view == "Audit") currentAudit = null; grid.DataSource = view == "Students" ? (object)repo.GetStudents() : view == "Courses" ? (object)repo.GetCourses() : view == "Enrollments" ? (object)repo.GetEnrollments() : view == "Audit" ? (object)(currentAudit = repo.SearchAuditHistory(auditEntity, auditActor, auditFrom, auditUntil)) : repo.GetInstructors(); } catch (Exception ex) { MessageBox.Show(ex.Message, "SQL Server", MessageBoxButtons.OK, MessageBoxIcon.Error); } };
             Action<string, Action> add = (label, action) => { var b = Theme.Button(label); b.AutoSize = true; b.Click += (s,e) => { try { action(); } catch (Exception ex) { MessageBox.Show(ex.Message, "SQL Server", MessageBoxButtons.OK, MessageBoxIcon.Error); } }; toolbar.Controls.Add(b); };
+            add(persian ? "سلامت دیتابیس" : "Database health", () => ShowDatabaseHealthCenter());
             add(persian ? "دانشجویان" : "Students", () => { view = "Students"; reload(); });
             add(persian ? "دوره‌ها" : "Courses", () => { view = "Courses"; reload(); });
             add(persian ? "ثبت‌نام‌ها" : "Enrollments", () => { view = "Enrollments"; reload(); });
             add(persian ? "اساتید" : "Instructors", () => { view = "Instructors"; reload(); });
-            add(persian ? "تاریخچه تغییرات" : "Audit history", () => { view = "Audit"; reload(); });
+            add(persian ? "تاریخچه تغییرات" : "Audit history", () => { view = "Audit"; currentAudit = null; reload(); });
             add(persian ? "بازخوانی" : "Refresh", () => reload());
             add(persian ? "داشبورد ممیزی" : "Audit dashboard", () => ShowAuditDashboard(repo, persian));
             add(persian ? "فیلتر تاریخچه" : "Filter audit", () =>
@@ -66,6 +67,7 @@ namespace AshkanLMS.UI
                 DateTime parsedFrom = DateTime.MinValue, parsedUntil = DateTime.MinValue;
                 if (!string.IsNullOrWhiteSpace(from) && !DateTime.TryParseExact(from.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedFrom)) throw new ArgumentException("Invalid From UTC date.");
                 if (!string.IsNullOrWhiteSpace(until) && !DateTime.TryParseExact(until.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedUntil)) throw new ArgumentException("Invalid Through UTC date.");
+                currentAudit = null;
                 auditEntity = string.IsNullOrWhiteSpace(entity) ? null : entity.Trim();
                 auditActor = string.IsNullOrWhiteSpace(actor) ? null : actor.Trim();
                 auditFrom = string.IsNullOrWhiteSpace(from) ? (DateTime?)null : parsedFrom;

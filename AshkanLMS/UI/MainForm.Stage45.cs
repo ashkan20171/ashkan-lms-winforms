@@ -35,6 +35,17 @@ namespace AshkanLMS.UI
                 var inspect = new Button { Text = fa ? "جزئیات" : "Details", Width = 110, Height = 34 };
                 var decide = new Button { Text = fa ? "ثبت نتیجه بررسی" : "Record decision", Width = 150, Height = 34 };
                 buttons.Controls.Add(refresh); buttons.Controls.Add(inspect); buttons.Controls.Add(decide);
+                var history = new Button { Text = fa ? "تاریخچه رسیدگی" : "Review history", Width = 145, Height = 34 };
+                buttons.Controls.Add(history);
+                var overview = new Button { Text = fa ? "خلاصه وضعیت پرونده‌ها" : "Review overview", Width = 165, Height = 34 };
+                buttons.Controls.Add(overview);
+                overview.Click += (sender, args) =>
+                {
+                    try { ShowReviewStatusOverview(repository, fromUtc, untilUtc, actor, fa); }
+                    catch (Exception ex) { MessageBox.Show(window, ex.Message, "Review overview", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+                };
+
+                history.Click += (sender, args) => ShowAuditReviewHistory(repository, fa);
                 Action load = () =>
                 {
                     var data = repository.GetAuditReviewDecisions(fromUtc, untilUtc, actor);

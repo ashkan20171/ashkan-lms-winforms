@@ -191,7 +191,140 @@ namespace AshkanLMS.Services
             });
         }
 
+        // Stage 47: administrator-only review history. Filters use parameters and UTC bounds.
+        internal DataTable SearchAuditReviewHistory(long? auditId, string reviewer, string status,
+            DateTime? fromUtc, DateTime? untilUtcExclusive, int maxRows = 500)
+        {
+            AuthorizationService.RequireAccountAdmin();
+            if (maxRows < 1 || maxRows > 2000) throw new ArgumentOutOfRangeException("maxRows");
+            if (fromUtc.HasValue && untilUtcExclusive.HasValue && fromUtc.Value >= untilUtcExclusive.Value)
+                throw new ArgumentException("Invalid UTC date range.");
+            return WithConnection(connection =>
+            {
+                var result = new DataTable("ReviewHistory");
+                using (var command = new SqlCommand(@"SELECT TOP (@limit) ReviewHistoryId,AuditId,ChangeType,
+                    PreviousStatus,NewStatus,PreviousReviewer,NewReviewer,PreviousNote,NewNote,
+                    ChangedAtUtc,SqlLogin
+                    FROM dbo.LmsAuditReviewHistory
+                    WHERE (@id IS NULL OR AuditId=@id)
+                      AND (@reviewer IS NULL OR NewReviewer=@reviewer)
+                      AND (@status IS NULL OR NewStatus=@status)
+                      AND (@from IS NULL OR ChangedAtUtc>=@from)
+                      AND (@until IS NULL OR ChangedAtUtc<@until)
+                    ORDER BY ReviewHistoryId DESC", connection))
+                {
+                    command.Parameters.Add(P("@limit", SqlDbType.Int, maxRows));
+                    command.Parameters.Add(P("@id", SqlDbType.BigInt, auditId.HasValue ? (object)auditId.Value : DBNull.Value));
+                    command.Parameters.Add(P("@reviewer", SqlDbType.NVarChar, string.IsNullOrWhiteSpace(reviewer) ? (object)DBNull.Value : reviewer.Trim(), 256));
+                    command.Parameters.Add(P("@status", SqlDbType.NVarChar, string.IsNullOrWhiteSpace(status) ? (object)DBNull.Value : status, 20));
+                    command.Parameters.Add(P("@from", SqlDbType.DateTime2, fromUtc.HasValue ? (object)fromUtc.Value : DBNull.Value));
+                    command.Parameters.Add(P("@until", SqlDbType.DateTime2, untilUtcExclusive.HasValue ? (object)untilUtcExclusive.Value : DBNull.Value));
+                    using (var adapter = new SqlDataAdapter(command)) adapter.Fill(result);
+                }
+                return result;
+            });
+        }
+
         // Review decisions are separate from immutable source audit events.
+        // Stage 48: aggregate the entire selected period, not a truncated preview.
+        // Stage 49: read-only, administrator-scoped threshold rule. No alerts are persisted or sent.
+        // Stage 50: persistent configuration, not an automatic alert service.
+        internal int GetSavedDailyDeletionThreshold()
+        {
+            AuthorizationService.RequireAccountAdmin();
+            return WithConnection(connection =>
+            {
+                using (var command = new SqlCommand(
+                    "SELECT MinimumDailyDeletes FROM dbo.LmsDeletionThresholdRules WHERE RuleKey=N'DailyDeletionCount'", connection))
+                {
+                    object value = command.ExecuteScalar();
+                    return value == null || value == DBNull.Value ? 25 : Convert.ToInt32(value);
+                }
+            });
+        }
+
+        internal void SaveDailyDeletionThreshold(int minimum)
+        {
+            AuthorizationService.RequireAccountAdmin();
+            if (minimum < 1 || minimum > 10000) throw new ArgumentOutOfRangeException("minimum");
+            if (string.IsNullOrWhiteSpace(AppSession.UserName)) throw new InvalidOperationException("Sign in to save a rule.");
+            WithConnection(connection =>
+            {
+                // The unique RuleKey and transaction lock prevent duplicate initial inserts.
+                const string sql = @"SET XACT_ABORT ON;
+                    BEGIN TRANSACTION;
+                    UPDATE dbo.LmsDeletionThresholdRules WITH (UPDLOCK, SERIALIZABLE)
+                       SET MinimumDailyDeletes=@minimum,UpdatedBy=@actor,UpdatedAtUtc=SYSUTCDATETIME()
+                     WHERE RuleKey=N'DailyDeletionCount';
+                    IF @@ROWCOUNT=0
+                        INSERT INTO dbo.LmsDeletionThresholdRules(RuleKey,MinimumDailyDeletes,UpdatedBy)
+                        VALUES(N'DailyDeletionCount',@minimum,@actor);
+                    COMMIT TRANSACTION;";
+                Execute(connection, sql, P("@minimum", SqlDbType.Int, minimum),
+                    P("@actor", SqlDbType.NVarChar, AppSession.UserName, 256));
+                return 0;
+            });
+        }
+
+        internal DataTable GetHighVolumeDeletionSignals(DateTime fromUtc, DateTime untilUtcExclusive,
+            string actor, int dailyThreshold)
+        {
+            AuthorizationService.RequireAccountAdmin();
+            if (dailyThreshold < 1 || dailyThreshold > 10000)
+                throw new ArgumentOutOfRangeException("dailyThreshold");
+            if (fromUtc >= untilUtcExclusive || (untilUtcExclusive - fromUtc).TotalDays > 366)
+                throw new ArgumentException("Select a valid UTC period of at most 366 days.");
+            return WithConnection(connection =>
+            {
+                var table = new DataTable("HighVolumeDeletionSignals");
+                using (var command = new SqlCommand(@"SELECT CAST(OccurredAtUtc AS date) AS UtcDay,
+                    COALESCE(NULLIF(Actor,N''),N'(unknown)') AS ActorName,
+                    COUNT_BIG(*) AS DeletionCount
+                    FROM dbo.LmsRelationalAudit
+                    WHERE Operation=N'DELETE' AND OccurredAtUtc>=@from AND OccurredAtUtc<@until
+                      AND (@actor IS NULL OR Actor=@actor)
+                    GROUP BY CAST(OccurredAtUtc AS date), COALESCE(NULLIF(Actor,N''),N'(unknown)')
+                    HAVING COUNT_BIG(*) >= @threshold
+                    ORDER BY DeletionCount DESC, UtcDay DESC", connection))
+                {
+                    command.Parameters.Add(P("@from", SqlDbType.DateTime2, fromUtc));
+                    command.Parameters.Add(P("@until", SqlDbType.DateTime2, untilUtcExclusive));
+                    command.Parameters.Add(P("@actor", SqlDbType.NVarChar,
+                        string.IsNullOrWhiteSpace(actor) ? null : actor.Trim(), 256));
+                    command.Parameters.Add(P("@threshold", SqlDbType.Int, dailyThreshold));
+                    using (var adapter = new SqlDataAdapter(command)) adapter.Fill(table);
+                }
+                return table;
+            });
+        }
+
+        internal DataTable GetReviewStatusSummary(DateTime fromUtc, DateTime untilUtcExclusive, string actor)
+        {
+            AuthorizationService.RequireAccountAdmin();
+            if (fromUtc >= untilUtcExclusive || (untilUtcExclusive - fromUtc).TotalDays > 366)
+                throw new ArgumentException("Select a valid UTC period of at most 366 days.");
+            return WithConnection(connection =>
+            {
+                var table = new DataTable("ReviewStatusSummary");
+                using (var command = new SqlCommand(@"SELECT
+                    CASE WHEN r.AuditId IS NULL THEN N'Unreviewed' ELSE r.ReviewStatus END AS ReviewStatus,
+                    COUNT_BIG(*) AS EventCount
+                    FROM dbo.LmsRelationalAudit a
+                    LEFT JOIN dbo.LmsAuditReviews r ON r.AuditId=a.AuditId
+                    WHERE a.Operation=N'DELETE' AND a.OccurredAtUtc>=@from AND a.OccurredAtUtc<@until
+                      AND (@actor IS NULL OR a.Actor=@actor)
+                    GROUP BY CASE WHEN r.AuditId IS NULL THEN N'Unreviewed' ELSE r.ReviewStatus END
+                    ORDER BY EventCount DESC", connection))
+                {
+                    command.Parameters.Add(P("@from", SqlDbType.DateTime2, fromUtc));
+                    command.Parameters.Add(P("@until", SqlDbType.DateTime2, untilUtcExclusive));
+                    command.Parameters.Add(P("@actor", SqlDbType.NVarChar, string.IsNullOrWhiteSpace(actor) ? null : actor.Trim(), 256));
+                    using (var adapter = new SqlDataAdapter(command)) adapter.Fill(table);
+                }
+                return table;
+            });
+        }
+
         internal DataTable GetAuditReviewDecisions(DateTime fromUtc, DateTime untilUtcExclusive, string actor)
         {
             AuthorizationService.RequireAccountAdmin();

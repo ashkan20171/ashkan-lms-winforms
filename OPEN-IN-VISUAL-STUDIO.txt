@@ -1,13 +1,15 @@
-AshkanLMS - Visual Studio instructions
-=====================================
-1. Install Visual Studio 2022 with workload: .NET desktop development.
-2. In Visual Studio Installer > Individual components, ensure .NET Framework 4.8 SDK and .NET Framework 4.8 targeting pack are installed.
-3. Open AshkanLMS.sln (do not open only the inner folder).
-4. Build > Rebuild Solution.
-5. Run with F5.
+AshkanLMS — Stage 70
 
-Demo accounts:
-admin / 1234
-instructor / 1234
+1. Open AshkanLMS.sln in Visual Studio 2022 on Windows.
+2. Ensure the .NET desktop development workload and .NET Framework 4.8 targeting pack are installed.
+3. Select Debug / Any CPU and choose Build > Rebuild Solution.
+4. Run with F5 and verify the login, navigation, language direction, and diagnostic views.
 
-This package contains a corrected classic WinForms .NET Framework 4.8 project file.
+Static preflight (from repository root):
+  python .\tools\preflight.py
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\validate-project.ps1
+
+Optional Windows rebuild gate (requires Visual Studio/MSBuild):
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\validate-project.ps1 -Build
+
+SQL Server is only required for relational persistence features. Back up databases before applying scripts.
