@@ -6,12 +6,14 @@ using System.Text;
 namespace AshkanLMS.Services {
  public sealed class SecurityAuditService {
   private static readonly object Gate = new object();
-  private static readonly string Folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"AshkanLMS");
-  private static string LogPath { get { return Path.Combine(Folder,"security-events.log"); } }
+  private readonly string folder;
+  private string LogPath { get { return Path.Combine(folder,"security-events.log"); } }
+  public SecurityAuditService() : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"AshkanLMS")) {}
+  public SecurityAuditService(string dataFolder) { folder=Path.GetFullPath(dataFolder); }
   public sealed class Entry { public DateTime UtcTime {get;set;} public string Actor {get;set;} public string Event {get;set;} public string Subject {get;set;} }
   private static string Safe(string value){return (value??"").Replace("\r"," ").Replace("\n"," ").Replace("|","/").Trim();}
   public void Record(string actor,string eventName,string subject){
-   lock(Gate){Directory.CreateDirectory(Folder);File.AppendAllText(LogPath,DateTime.UtcNow.ToString("o")+"|"+Safe(actor)+"|"+Safe(eventName)+"|"+Safe(subject)+Environment.NewLine,Encoding.UTF8);}
+   lock(Gate){Directory.CreateDirectory(folder);File.AppendAllText(LogPath,DateTime.UtcNow.ToString("o")+"|"+Safe(actor)+"|"+Safe(eventName)+"|"+Safe(subject)+Environment.NewLine,Encoding.UTF8);}
   }
   public List<Entry> Recent(string actingRole,int limit=200){
    if(actingRole!="Administrator")throw new UnauthorizedAccessException("Administrator required.");

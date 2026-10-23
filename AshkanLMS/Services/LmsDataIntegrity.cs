@@ -24,6 +24,25 @@ namespace AshkanLMS.Services
             if (state.Students.Select(x => x.Email).Distinct(StringComparer.OrdinalIgnoreCase).Count() != state.Students.Count ||
                 state.Courses.Select(x => x.Title).Distinct(StringComparer.OrdinalIgnoreCase).Count() != state.Courses.Count)
                 throw new InvalidDataException("Duplicate student email or course title.");
+            // Explicit identifiers, when present, must refer to existing entities.
+            var studentIds = new HashSet<int>(state.Students.Select(x => x.Id));
+            var courseIds = new HashSet<int>(state.Courses.Select(x => x.Id));
+            if (state.Enrollments != null && state.Enrollments.Any(x => x != null &&
+                ((x.StudentId != 0 && !studentIds.Contains(x.StudentId)) ||
+                 (x.CourseId != 0 && !courseIds.Contains(x.CourseId)))))
+                throw new InvalidDataException("Enrollment has an invalid identity reference.");
+            if (state.Attendance != null && state.Attendance.Any(x => x == null ||
+                (x.StudentId != 0 && !studentIds.Contains(x.StudentId)) ||
+                (x.CourseId != 0 && !courseIds.Contains(x.CourseId))))
+                throw new InvalidDataException("Attendance has an invalid identity reference.");
+            if (state.Grades != null && state.Grades.Any(x => x == null ||
+                (x.StudentId != 0 && !studentIds.Contains(x.StudentId)) ||
+                (x.CourseId != 0 && !courseIds.Contains(x.CourseId))))
+                throw new InvalidDataException("Grade has an invalid identity reference.");
+            if (state.Certificates != null && state.Certificates.Any(x => x == null ||
+                (x.StudentId != 0 && !studentIds.Contains(x.StudentId)) ||
+                (x.CourseId != 0 && !courseIds.Contains(x.CourseId))))
+                throw new InvalidDataException("Certificate has an invalid identity reference.");
             if (state.Enrollments != null)
             {
                 var studentNames = new HashSet<string>(state.Students.Select(x => x.Name), StringComparer.OrdinalIgnoreCase);

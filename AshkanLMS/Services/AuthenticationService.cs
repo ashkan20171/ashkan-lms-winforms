@@ -8,12 +8,18 @@ using System.Text;
 namespace AshkanLMS.Services {
  public sealed class AuthenticationService {
   private static readonly object Gate=new object();
-  private readonly string folder=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"AshkanLMS");
+  private readonly string folder;
   private string AccountsPath {get{return Path.Combine(folder,"accounts.dat");}}
   private string LockPath {get{return Path.Combine(folder,"login-locks.dat");}}
   public string SetupMessage {get;private set;}
-  private readonly SecurityAuditService audit=new SecurityAuditService();
-  public AuthenticationService(){Initialize();}
+  private readonly SecurityAuditService audit;
+  public AuthenticationService() : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"AshkanLMS")) {}
+  public AuthenticationService(string dataFolder){
+   if(string.IsNullOrWhiteSpace(dataFolder))throw new ArgumentException("Data folder required.","dataFolder");
+   folder=Path.GetFullPath(dataFolder);
+   audit=new SecurityAuditService(folder);
+   Initialize();
+  }
   private void Initialize(){
    lock(Gate){Directory.CreateDirectory(folder);if(File.Exists(AccountsPath))return;
     byte[] random=new byte[24];using(var rng=RandomNumberGenerator.Create())rng.GetBytes(random);

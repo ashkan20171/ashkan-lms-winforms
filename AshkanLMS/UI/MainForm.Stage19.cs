@@ -36,9 +36,9 @@ namespace AshkanLMS.UI {
   void OpenAcademicDialog(string key) {
    using(var dialog=new Form{Text=Localization.T(key),StartPosition=FormStartPosition.CenterParent,Size=new Size(490,440),Font=Theme.Font(10),BackColor=Theme.Canvas,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false}) {
     var courses=new ComboBox{Left=24,Top=62,Width=425,DropDownStyle=ComboBoxStyle.DropDownList};
-    courses.Items.AddRange(data.Courses.Select(x=>x.Title).Cast<object>().ToArray());
+    courses.DisplayMember="Title"; courses.ValueMember="Id"; courses.DataSource=data.Courses.ToList();
     var students=new ComboBox{Left=24,Top=128,Width=425,DropDownStyle=ComboBoxStyle.DropDownList};
-    students.Items.AddRange(data.Students.Select(x=>x.Name).Cast<object>().ToArray());
+    students.DisplayMember="Name"; students.ValueMember="Id"; students.DataSource=data.Students.ToList();
     var title=new TextBox{Left=24,Top=128,Width=425};
     var date=new DateTimePicker{Left=24,Top=194,Width=425,Format=DateTimePickerFormat.Custom,CustomFormat="yyyy-MM-dd HH:mm"};
     var number=new NumericUpDown{Left=24,Top=260,Width=200,Minimum=key=="Exams"?1:0,Maximum=key=="Exams"?500:20,DecimalPlaces=key=="Grades"?2:0};
@@ -54,14 +54,14 @@ namespace AshkanLMS.UI {
     save.Click+=(sender,args)=>{
      try {
       if(courses.SelectedItem==null)throw new InvalidOperationException(AppSession.Persian?"ابتدا دوره را انتخاب کنید.":"Select a course.");
-      string course=courses.SelectedItem.ToString();string student=students.SelectedItem==null?null:students.SelectedItem.ToString();
-      if(person&&student==null)throw new InvalidOperationException(AppSession.Persian?"دانشجو را انتخاب کنید.":"Select a student.");
+      int courseId=(int)courses.SelectedValue; string course=data.Courses.First(x=>x.Id==courseId).Title; int studentId=students.SelectedValue is int?(int)students.SelectedValue:0;
+      if(person&&studentId==0)throw new InvalidOperationException(AppSession.Persian?"دانشجو را انتخاب کنید.":"Select a student.");
       var ops=new AcademicOperations(data);
       if(key=="Exams")ops.ScheduleExam(title.Text,course,date.Value,(int)number.Value);
       else if(key=="Assignments")ops.CreateAssignment(title.Text,course,date.Value);
-      else if(key=="Attendance")ops.RecordAttendance(student,course,date.Value,present.Checked);
-      else if(key=="Grades")ops.RecordGrade(student,course,number.Value);
-      else ops.IssueCertificate(student,course);
+      else if(key=="Attendance")ops.RecordAttendance(studentId,courseId,date.Value,present.Checked);
+      else if(key=="Grades")ops.RecordGrade(studentId,courseId,number.Value);
+      else ops.IssueCertificate(studentId,courseId);
       dialog.DialogResult=DialogResult.OK;
      } catch(Exception ex){MessageBox.Show(dialog,ex.Message,AppSession.Persian?"خطای اعتبارسنجی":"Validation error",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
     };

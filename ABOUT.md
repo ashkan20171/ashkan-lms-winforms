@@ -1,20 +1,15 @@
-# About AshkanLMS
+# AshkanLMS — About
 
-AshkanLMS is a bilingual desktop Learning Management System portfolio project developed in C# with Windows Forms and .NET Framework 4.8. It combines LMS-oriented academic workflows with administrative tooling, audit-review concepts, and a local Support & Diagnostics experience.
+AshkanLMS is a portfolio-oriented Learning Management System desktop application built with C# Windows Forms and .NET Framework 4.8. The project demonstrates practical work with desktop UI development, bilingual user experiences, authentication and authorization concepts, SQL Server migration scripts, audit workflows, and local diagnostics.
 
-The project emphasizes separation of concerns across UI, services, models, and core application state; Persian/English localization with RTL/LTR layout; and safer operational reporting that avoids exporting raw exception messages or connection secrets.
+## Engineering focus
+- Maintainable C# code and explicit separation between UI, services, models, and database scripts.
+- Persian/English localization with RTL/LTR considerations.
+- Operational support features: diagnostics, safe event summaries, and release validation scripts.
+- Repeatable quality checks through Python unit tests and a Windows CI workflow.
 
-## Portfolio focus
+## Important status note
+This repository is a software engineering portfolio project. The existence of source code, migration scripts, or CI configuration does not imply that every feature has passed runtime or production acceptance testing. Check the latest GitHub Actions run and test the application against a disposable SQL Server environment before production use.
 
-- C# and .NET desktop application development
-- Windows Forms UI engineering and localization
-- SQL Server-oriented persistence and migration workflows
-- Role-aware administration and audit-support tooling
-- Diagnostics, release preparation, and maintainability
-
-## Current maturity
-
-AshkanLMS is an evolving portfolio project, not a claim of production certification. Static archive and project-file checks may be available for a given stage, but a real Windows build, end-to-end runtime validation, and security review must be completed and recorded before describing a release as production-ready.
-
-**Author:** Ashkan Motaei  
-**Suggested repository:** `ashkan-lms-winforms`
+## Intended audience
+Hiring teams evaluating C#/.NET desktop engineering, maintenance, troubleshooting, localization, and delivery practices for junior-to-mid-level software engineering opportunities in Germany and across Europe.

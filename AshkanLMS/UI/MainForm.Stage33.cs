@@ -46,6 +46,7 @@ namespace AshkanLMS.UI
             Action reload = () => { try { if (view == "Audit") currentAudit = null; grid.DataSource = view == "Students" ? (object)repo.GetStudents() : view == "Courses" ? (object)repo.GetCourses() : view == "Enrollments" ? (object)repo.GetEnrollments() : view == "Audit" ? (object)(currentAudit = repo.SearchAuditHistory(auditEntity, auditActor, auditFrom, auditUntil)) : repo.GetInstructors(); } catch (Exception ex) { MessageBox.Show(ex.Message, "SQL Server", MessageBoxButtons.OK, MessageBoxIcon.Error); } };
             Action<string, Action> add = (label, action) => { var b = Theme.Button(label); b.AutoSize = true; b.Click += (s,e) => { try { action(); } catch (Exception ex) { MessageBox.Show(ex.Message, "SQL Server", MessageBoxButtons.OK, MessageBoxIcon.Error); } }; toolbar.Controls.Add(b); };
             add(persian ? "سلامت دیتابیس" : "Database health", () => ShowDatabaseHealthCenter());
+            add(persian ? "مهاجرت کنترل‌شده" : "Migration dashboard", () => ShowMigrationDashboard112());
             add(persian ? "دانشجویان" : "Students", () => { view = "Students"; reload(); });
             add(persian ? "دوره‌ها" : "Courses", () => { view = "Courses"; reload(); });
             add(persian ? "ثبت‌نام‌ها" : "Enrollments", () => { view = "Enrollments"; reload(); });

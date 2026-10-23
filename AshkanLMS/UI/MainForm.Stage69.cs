@@ -13,15 +13,6 @@ namespace AshkanLMS.UI
 {
     public partial class MainForm
     {
-        private sealed class Stage69SummaryRow
-        {
-            public string Category { get; set; }
-            public string Type { get; set; }
-            public int Count { get; set; }
-            public DateTime FirstUtc { get; set; }
-            public DateTime LastUtc { get; set; }
-        }
-
         private void ShowDiagnosticSummaryStage69()
         {
             AuthorizationService.RequireAccountAdmin();
@@ -50,10 +41,8 @@ namespace AshkanLMS.UI
                 catch (UnauthorizedAccessException) { }
                 catch (System.Security.SecurityException) { }
             }
-            var summaryRows = events.GroupBy(x => new { x.Item2, x.Item3 })
-                .Select(g => new Stage69SummaryRow { Category = g.Key.Item2, Type = g.Key.Item3, Count = g.Count(),
-                    FirstUtc = g.Min(x => x.Item1), LastUtc = g.Max(x => x.Item1) })
-                .OrderByDescending(x => x.Count).ThenBy(x => x.Category).ThenBy(x => x.Type).ToList();
+            var summaryRows = DiagnosticSummaryService.Aggregate(events.Select(x => new DiagnosticSummaryService.Event
+            { Utc = x.Item1, Category = x.Item2, Type = x.Item3 }));
 
             using (var dialog = new Form { Text = fa ? "گزارش آماری خطاها" : "Diagnostic Summary Report",
                 Size = new Size(900, 580), MinimumSize = new Size(720, 430), StartPosition = FormStartPosition.CenterParent,
@@ -91,11 +80,8 @@ namespace AshkanLMS.UI
                     using (var save = new SaveFileDialog { Filter = "CSV file (*.csv)|*.csv", FileName = "AshkanLMS-diagnostic-summary.csv", OverwritePrompt = true })
                     {
                         if (save.ShowDialog(dialog) != DialogResult.OK) return;
-                        Func<string, string> csv = value => "\"" + (value ?? string.Empty).Replace("\"", "\"\"") + "\"";
-                        var lines = new List<string> { "Category,ErrorType,Count,FirstUtc,LastUtc" };
-                        foreach (var item in summaryRows) lines.Add(string.Join(",", csv(item.Category), csv(item.Type), item.Count.ToString(CultureInfo.InvariantCulture),
-                            csv(item.FirstUtc.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)), csv(item.LastUtc.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture))));
-                        try { File.WriteAllLines(save.FileName, lines, new UTF8Encoding(true)); MessageBox.Show(dialog, fa ? "گزارش آماری ذخیره شد." : "Summary report saved.", dialog.Text, MessageBoxButtons.OK, MessageBoxIcon.Information); }
+                        string csvText = DiagnosticSummaryService.ExportCsv(summaryRows);
+                        try { File.WriteAllText(save.FileName, csvText, new UTF8Encoding(true)); MessageBox.Show(dialog, fa ? "گزارش آماری ذخیره شد." : "Summary report saved.", dialog.Text, MessageBoxButtons.OK, MessageBoxIcon.Information); }
                         catch (IOException) { MessageBox.Show(dialog, fa ? "ذخیره فایل ممکن نشد." : "Could not save the report.", dialog.Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
                         catch (UnauthorizedAccessException) { MessageBox.Show(dialog, fa ? "مجوز ذخیره فایل وجود ندارد." : "No permission to save the report.", dialog.Text, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
                     }

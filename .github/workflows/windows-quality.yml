@@ -1,0 +1,45 @@
+name: Windows quality gate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  static-checks-and-build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run portable project checks
+        run: python -m unittest discover -s tests -v
+
+      - name: Validate project structure
+        shell: pwsh
+        run: ./tools/validate-project.ps1 -RequireAllSqlScripts
+
+      - name: Rebuild Release with MSBuild
+        shell: pwsh
+        run: ./tools/validate-project.ps1 -Build -Configuration Release -RequireAllSqlScripts
+
+      - name: Run executable C# diagnostic unit tests
+        shell: pwsh
+        run: ./tools/run-csharp-tests.ps1
+
+      - name: Run executable C# authorization tests
+        shell: pwsh
+        run: ./tools/run-authorization-tests.ps1
+
+      - name: Run executable C# authentication tests
+        shell: pwsh
+        run: ./tools/run-authentication-tests.ps1
+
+      - name: Run session idle timeout unit tests
+        shell: pwsh
+        run: ./tools/run-session-tests.ps1

@@ -21,26 +21,46 @@ namespace AshkanLMS.Services {
    var item=new Assignment{Id=db.Assignments.Count==0?1:db.Assignments.Max(x=>x.Id)+1,Title=title.Trim(),Course=course,DueDate=due,StatusKey="Open",Submitted=0};
    db.Assignments.Add(item);try{db.Log("CreatedAssignment","Assignment #"+item.Id);}catch{db.Assignments.Remove(item);throw;}return item;
   }
+  void RequireEnrollment(int studentId,int courseId){
+   if(!db.Students.Any(x=>x.Id==studentId)||!db.Courses.Any(x=>x.Id==courseId))throw new InvalidOperationException("Student or course not found.");
+   if(!db.Enrollments.Any(x=>x.StatusKey!="Cancelled" && (x.StudentId==studentId || (x.StudentId==0 && AcademicIdentityService.UniqueStudentId(db,x.Student)==studentId)) && (x.CourseId==courseId || (x.CourseId==0 && AcademicIdentityService.UniqueCourseId(db,x.Course)==courseId))))throw new InvalidOperationException("An active enrollment is required.");
+  }
   public AttendanceRecord RecordAttendance(string student,string course,DateTime day,bool present){
-   AuthorizationService.RequireAcademicWrite();
-   RequireEnrollment(student,course);day=day.Date;
-   if(db.Attendance.Any(x=>x.Student==student&&x.Course==course&&x.Date.Date==day))throw new InvalidOperationException("Attendance already recorded for this date.");
-   var item=new AttendanceRecord{Id=db.Attendance.Count==0?1:db.Attendance.Max(x=>x.Id)+1,Student=student,Course=course,Date=day,StatusKey=present?"Present":"Absent"};
+   int sid=AcademicIdentityService.UniqueStudentId(db,student),cid=AcademicIdentityService.UniqueCourseId(db,course);
+   if(sid==0||cid==0)throw new InvalidOperationException("Ambiguous or missing student/course. Select by ID.");
+   return RecordAttendance(sid,cid,day,present);
+  }
+  public AttendanceRecord RecordAttendance(int studentId,int courseId,DateTime day,bool present){
+   AuthorizationService.RequireAcademicWrite();RequireEnrollment(studentId,courseId);day=day.Date;
+   if(db.Attendance.Any(x=>(x.StudentId==studentId || (x.StudentId==0 && AcademicIdentityService.UniqueStudentId(db,x.Student)==studentId)) && (x.CourseId==courseId || (x.CourseId==0 && AcademicIdentityService.UniqueCourseId(db,x.Course)==courseId)) && x.Date.Date==day))throw new InvalidOperationException("Attendance already recorded for this date.");
+   var student=db.Students.First(x=>x.Id==studentId);var course=db.Courses.First(x=>x.Id==courseId);
+   var item=new AttendanceRecord{Id=db.Attendance.Count==0?1:db.Attendance.Max(x=>x.Id)+1,StudentId=studentId,CourseId=courseId,Student=student.Name,Course=course.Title,Date=day,StatusKey=present?"Present":"Absent"};
    db.Attendance.Add(item);try{db.Log("RecordedAttendance","Attendance #"+item.Id);}catch{db.Attendance.Remove(item);throw;}return item;
   }
   public Grade RecordGrade(string student,string course,decimal score){
-   AuthorizationService.RequireAcademicWrite();
-   RequireEnrollment(student,course);if(score<0||score>20)throw new ArgumentOutOfRangeException("score","Score must be between 0 and 20.");
-   if(db.Grades.Any(x=>x.Student==student&&x.Course==course))throw new InvalidOperationException("A grade already exists for this enrollment.");
-   var item=new Grade{Id=db.Grades.Count==0?1:db.Grades.Max(x=>x.Id)+1,Student=student,Course=course,Score=score,Letter=score>=18?"A":score>=16?"B":score>=14?"C":score>=10?"D":"F"};
+   int sid=AcademicIdentityService.UniqueStudentId(db,student),cid=AcademicIdentityService.UniqueCourseId(db,course);
+   if(sid==0||cid==0)throw new InvalidOperationException("Ambiguous or missing student/course. Select by ID.");
+   return RecordGrade(sid,cid,score);
+  }
+  public Grade RecordGrade(int studentId,int courseId,decimal score){
+   AuthorizationService.RequireAcademicWrite();RequireEnrollment(studentId,courseId);
+   if(score<0||score>20)throw new ArgumentOutOfRangeException("score","Score must be between 0 and 20.");
+   if(db.Grades.Any(x=>(x.StudentId==studentId || (x.StudentId==0 && AcademicIdentityService.UniqueStudentId(db,x.Student)==studentId)) && (x.CourseId==courseId || (x.CourseId==0 && AcademicIdentityService.UniqueCourseId(db,x.Course)==courseId))))throw new InvalidOperationException("A grade already exists for this enrollment.");
+   var student=db.Students.First(x=>x.Id==studentId);var course=db.Courses.First(x=>x.Id==courseId);
+   var item=new Grade{Id=db.Grades.Count==0?1:db.Grades.Max(x=>x.Id)+1,StudentId=studentId,CourseId=courseId,Student=student.Name,Course=course.Title,Score=score,Letter=score>=18?"A":score>=16?"B":score>=14?"C":score>=10?"D":"F"};
    db.Grades.Add(item);try{db.Log("RecordedGrade","Grade #"+item.Id);}catch{db.Grades.Remove(item);throw;}return item;
   }
   public Certificate IssueCertificate(string student,string course){
-   AuthorizationService.RequireAcademicWrite();
-   RequireEnrollment(student,course);
-   if(db.Certificates.Any(x=>x.Student==student&&x.Course==course))throw new InvalidOperationException("Certificate already issued.");
-   if(!db.Grades.Any(x=>x.Student==student&&x.Course==course&&x.Score>=10))throw new InvalidOperationException("A passing grade is required.");
-   var item=new Certificate{Id=db.Certificates.Count==0?1:db.Certificates.Max(x=>x.Id)+1,Student=student,Course=course,IssuedAt=DateTime.Now,Code="ALMS-"+Guid.NewGuid().ToString("N").Substring(0,12).ToUpperInvariant()};
+   int sid=AcademicIdentityService.UniqueStudentId(db,student),cid=AcademicIdentityService.UniqueCourseId(db,course);
+   if(sid==0||cid==0)throw new InvalidOperationException("Ambiguous or missing student/course. Select by ID.");
+   return IssueCertificate(sid,cid);
+  }
+  public Certificate IssueCertificate(int studentId,int courseId){
+   AuthorizationService.RequireAcademicWrite();RequireEnrollment(studentId,courseId);
+   if(db.Certificates.Any(x=>(x.StudentId==studentId || (x.StudentId==0 && AcademicIdentityService.UniqueStudentId(db,x.Student)==studentId)) && (x.CourseId==courseId || (x.CourseId==0 && AcademicIdentityService.UniqueCourseId(db,x.Course)==courseId))))throw new InvalidOperationException("Certificate already issued.");
+   if(!db.Grades.Any(x=>(x.StudentId==studentId || (x.StudentId==0 && AcademicIdentityService.UniqueStudentId(db,x.Student)==studentId)) && (x.CourseId==courseId || (x.CourseId==0 && AcademicIdentityService.UniqueCourseId(db,x.Course)==courseId)) && x.Score>=10))throw new InvalidOperationException("A passing grade is required.");
+   var student=db.Students.First(x=>x.Id==studentId);var course=db.Courses.First(x=>x.Id==courseId);
+   var item=new Certificate{Id=db.Certificates.Count==0?1:db.Certificates.Max(x=>x.Id)+1,StudentId=studentId,CourseId=courseId,Student=student.Name,Course=course.Title,IssuedAt=DateTime.Now,Code="ALMS-"+Guid.NewGuid().ToString("N").Substring(0,12).ToUpperInvariant()};
    db.Certificates.Add(item);try{db.Log("IssuedCertificate",item.Code);}catch{db.Certificates.Remove(item);throw;}return item;
   }
  }

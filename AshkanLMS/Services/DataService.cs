@@ -19,6 +19,9 @@ namespace AshkanLMS.Services { public sealed class DataService {
  public List<Exam> Exams {get;}=new List<Exam>{new Exam{Id=601,Title="C# Midterm",Course="C# & .NET Fundamentals",Date=DateTime.Today.AddDays(5),Questions=25,StatusKey="Scheduled"},new Exam{Id=602,Title="SQL Final",Course="SQL Server Essentials",Date=DateTime.Today.AddDays(10),Questions=35,StatusKey="Draft"}};
  public List<Grade> Grades {get;}=new List<Grade>{new Grade{Id=701,Student="Sara Ahmadi",Course="C# & .NET Fundamentals",Score=18.5m,Letter="A"},new Grade{Id=702,Student="Ali Rezaei",Course="Clean Code in Practice",Score=15.75m,Letter="B"},new Grade{Id=703,Student="Maryam Mohammadi",Course="SQL Server Essentials",Score=19.25m,Letter="A+"}};
  public List<Certificate> Certificates {get;}=new List<Certificate>{new Certificate{Id=801,Student="Maryam Mohammadi",Course="SQL Server Essentials",IssuedAt=DateTime.Today.AddDays(-2),Code="ALMS-SQL-0001"}};
+ public List<TuitionInvoice> TuitionInvoices {get;}=new List<TuitionInvoice>();
+ public List<TuitionPayment> TuitionPayments {get;}=new List<TuitionPayment>();
+ public List<TuitionInstallment> TuitionInstallments {get;}=new List<TuitionInstallment>();
  public List<Activity> Activities {get;}=new List<Activity>{new Activity{At=DateTime.Now.AddMinutes(-18),TypeKey="EnrollmentEvent",TextKey="EnrollmentActivity"},new Activity{At=DateTime.Now.AddHours(-2),TypeKey="ExamEvent",TextKey="ExamActivity"},new Activity{At=DateTime.Now.AddHours(-5),TypeKey="CertificateEvent",TextKey="CertificateActivity"}};
  public List<AuditEntry> Audit {get;}=new List<AuditEntry>{new AuditEntry{At=DateTime.Now.AddMinutes(-12),User="admin",ActionKey="ViewedDashboard",Entity="Dashboard"},new AuditEntry{At=DateTime.Now.AddHours(-1),User="admin",ActionKey="ChangedLanguage",Entity="Settings"}};
  readonly string storePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AshkanLMS", "lms-data.json");
@@ -46,10 +49,14 @@ namespace AshkanLMS.Services { public sealed class DataService {
     if(state.Exams!=null){Exams.Clear();Exams.AddRange(state.Exams);}
     if(state.Grades!=null){Grades.Clear();Grades.AddRange(state.Grades);}
     if(state.Certificates!=null){Certificates.Clear();Certificates.AddRange(state.Certificates);}
+    if(state.TuitionInvoices!=null){TuitionInvoices.Clear();TuitionInvoices.AddRange(state.TuitionInvoices);}
+    if(state.TuitionPayments!=null){TuitionPayments.Clear();TuitionPayments.AddRange(state.TuitionPayments);}
+    if(state.TuitionInstallments!=null){TuitionInstallments.Clear();TuitionInstallments.AddRange(state.TuitionInstallments);}
     if(state.Activities!=null){Activities.Clear();Activities.AddRange(state.Activities);}
     if(state.Audit!=null){Audit.Clear();Audit.AddRange(state.Audit);}
  }
- LmsState CaptureState(){return new LmsState{Students=Students,Courses=Courses,Audit=Audit,Instructors=Instructors,Enrollments=Enrollments,Attendance=Attendance,Assignments=Assignments,Exams=Exams,Grades=Grades,Certificates=Certificates,Activities=Activities};}
+ internal LmsState SnapshotForMigration112() { AuthorizationService.RequireAccountAdmin(); return CaptureState(); }
+ LmsState CaptureState(){return new LmsState{Students=Students,Courses=Courses,Audit=Audit,Instructors=Instructors,Enrollments=Enrollments,Attendance=Attendance,Assignments=Assignments,Exams=Exams,Grades=Grades,Certificates=Certificates,Activities=Activities,TuitionInvoices=TuitionInvoices,TuitionPayments=TuitionPayments,TuitionInstallments=TuitionInstallments};}
  void Save(){
   LmsDataIntegrity.Validate(CaptureState());
   if(sqlStore!=null){sqlStore.Save(CaptureState());return;}
@@ -89,6 +96,21 @@ namespace AshkanLMS.Services { public sealed class DataService {
   if(!string.Equals(item.Name,name,StringComparison.OrdinalIgnoreCase)&& (Enrollments.Any(x=>x.Student==item.Name)||Attendance.Any(x=>x.Student==item.Name)||Grades.Any(x=>x.Student==item.Name)||Certificates.Any(x=>x.Student==item.Name)))throw new InvalidOperationException("Cannot rename a student with related records. Update relationships first.");
   var oldName=item.Name;var oldEmail=item.Email;item.Name=name;item.Email=email;
   try{Log("Updated","Student #"+id);}catch{item.Name=oldName;item.Email=oldEmail;throw;}
+ }
+ public void UpdateAcademicContact(int id, bool student, string phone, string address){
+  AuthorizationService.RequireAcademicWrite();
+  phone=(phone??"").Trim();address=(address??"").Trim();
+  if(phone.Length>32 || address.Length>400 || phone.Any(c=>!char.IsDigit(c) && c!='+' && c!='-' && c!=' ' && c!='(' && c!=')'))
+   throw new ArgumentException("Invalid phone or address.");
+  if(student){
+   var item=Students.FirstOrDefault(x=>x.Id==id);if(item==null)throw new InvalidOperationException("Student not found.");
+   var oldPhone=item.Phone;var oldAddress=item.Address;item.Phone=phone;item.Address=address;
+   try{Log("Updated","Student contact #"+id);}catch{item.Phone=oldPhone;item.Address=oldAddress;throw;}
+  }else{
+   var item=Instructors.FirstOrDefault(x=>x.Id==id);if(item==null)throw new InvalidOperationException("Instructor not found.");
+   var oldPhone=item.Phone;var oldAddress=item.Address;item.Phone=phone;item.Address=address;
+   try{Log("Updated","Instructor contact #"+id);}catch{item.Phone=oldPhone;item.Address=oldAddress;throw;}
+  }
  }
  public void DeleteStudent(int id){
   AuthorizationService.RequireAcademicWrite();
@@ -145,6 +167,33 @@ namespace AshkanLMS.Services { public sealed class DataService {
   int index=Enrollments.IndexOf(item);Enrollments.RemoveAt(index);if(course!=null)course.Students=Enrollments.Count(x=>x.Course==course.Title);
   try{Log("Deleted","Enrollment #"+id);}catch{Enrollments.Insert(index,item);if(course!=null)course.Students=oldCount;throw;}
  }
+ public void CreateInstallmentPlan(int invoiceId, int count, DateTime firstDueDate){
+  if(count<2 || count>24)throw new ArgumentOutOfRangeException("count");
+  var invoice=TuitionInvoices.SingleOrDefault(x=>x.Id==invoiceId);
+  if(invoice==null)throw new InvalidOperationException("Invoice not found");
+  if(TuitionInstallments.Any(x=>x.InvoiceId==invoiceId))throw new InvalidOperationException("An installment plan already exists");
+  var paid=TuitionPayments.Where(x=>x.InvoiceId==invoiceId).Sum(x=>x.Amount);
+  if(paid>0m)throw new InvalidOperationException("Create the plan before recording payments");
+  decimal baseAmount=decimal.Floor(invoice.Amount/count*100m)/100m;
+  var rows=new List<TuitionInstallment>();
+  for(int i=0;i<count;i++)rows.Add(new TuitionInstallment{Id=TuitionInstallments.Count==0?i+1:TuitionInstallments.Max(x=>x.Id)+i+1,InvoiceId=invoiceId,Sequence=i+1,Amount=i==count-1?invoice.Amount-baseAmount*(count-1):baseAmount,DueDate=firstDueDate.Date.AddMonths(i)});
+  TuitionInstallmentService.ValidatePlan(invoice,rows);
+  TuitionInstallments.AddRange(rows);
+  try{Log("InstallmentPlanCreated","Invoice #"+invoiceId);}catch{foreach(var row in rows)TuitionInstallments.Remove(row);throw;}
+ }
+ public TuitionInvoice AddTuitionInvoice(int studentId,int courseId,decimal amount,DateTime dueDate,string currency){
+  AuthorizationService.RequireAccountAdmin();
+  var invoice=new TuitionInvoice{Id=TuitionInvoices.Count==0?1:TuitionInvoices.Max(x=>x.Id)+1,StudentId=studentId,CourseId=courseId,Amount=amount,DueDate=dueDate,Currency=currency};
+  TuitionService.ValidateInvoice(invoice,Students,Courses);
+  if(TuitionInvoices.Any(x=>x.StudentId==studentId&&x.CourseId==courseId&&x.Currency==currency))throw new InvalidOperationException("An invoice already exists for this enrollment and currency.");
+  TuitionInvoices.Add(invoice);try{Log("InvoiceCreated","Invoice #"+invoice.Id);}catch{TuitionInvoices.Remove(invoice);throw;}return invoice;
+ }
+ public TuitionPayment AddTuitionPayment(int invoiceId,decimal amount,string reference){
+  AuthorizationService.RequireAccountAdmin();
+  var payment=new TuitionPayment{Id=TuitionPayments.Count==0?1:TuitionPayments.Max(x=>x.Id)+1,InvoiceId=invoiceId,Amount=amount,Reference=(reference??"").Trim(),PaidAt=DateTime.UtcNow};
+  TuitionService.ValidatePayment(payment,TuitionInvoices,TuitionPayments);
+  TuitionPayments.Add(payment);try{Log("PaymentRecorded","Payment #"+payment.Id);}catch{TuitionPayments.Remove(payment);throw;}return payment;
+ }
  public void Log(string action,string entity){var entry=new AuditEntry{At=DateTime.Now,User=AshkanLMS.Core.AppSession.UserName,ActionKey=action,Entity=entity};Audit.Insert(0,entry);try{Save();}catch{Audit.Remove(entry);throw;}}
  public bool Login(string u,string p,out string role){return authentication.Verify(u,p,out role);}
  }}
@@ -160,6 +209,9 @@ namespace AshkanLMS.Services {
   public List<AshkanLMS.Models.Exam> Exams {get;set;}
   public List<AshkanLMS.Models.Grade> Grades {get;set;}
   public List<AshkanLMS.Models.Certificate> Certificates {get;set;}
+  public List<AshkanLMS.Models.TuitionInvoice> TuitionInvoices {get;set;}
+  public List<AshkanLMS.Models.TuitionPayment> TuitionPayments {get;set;}
+  public List<AshkanLMS.Models.TuitionInstallment> TuitionInstallments {get;set;}
   public List<AshkanLMS.Models.Activity> Activities {get;set;}
   public List<AshkanLMS.Models.AuditEntry> Audit {get;set;}
  }
